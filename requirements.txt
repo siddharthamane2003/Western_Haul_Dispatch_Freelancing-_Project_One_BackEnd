@@ -40,3 +40,4 @@ geopy==2.4.1
 haversine==2.9.0
 cryptography==44.0.0
 email-validator==2.2.0
+aiosqlite
