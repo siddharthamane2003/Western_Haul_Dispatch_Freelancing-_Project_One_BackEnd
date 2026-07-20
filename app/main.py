@@ -17,16 +17,25 @@ from app.api.v1.router import api_router
 
 from app.db.database import create_all_tables
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application startup and shutdown events."""
-    logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    # Auto-create tables (works for SQLite dev mode)
-    await create_all_tables()
-    logger.info("Database tables ready.")
-    yield
-    logger.info("Shutting down...")
+    logger.info(
+        f"Starting {settings.APP_NAME} v{settings.APP_VERSION}"
+    )
 
+    try:
+        await create_all_tables()
+        logger.info("Database tables ready.")
+
+    except Exception as e:
+        logger.error(
+            f"Database initialization failed: {e}"
+        )
+
+    yield
+
+    logger.info("Shutting down...")
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
@@ -63,16 +72,26 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # ── Request Logging ──
+
+# ── Request Logging ──
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
+
     response = await call_next(request)
+
     duration = (time.time() - start_time) * 1000
+
     logger.info(
         f"{request.method} {request.url.path} "
         f"→ {response.status_code} [{duration:.1f}ms]"
     )
-    response.headers["X-Process-Time"] = f"{duration:.1f}ms"
+
+    # ── Security Headers ──
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
     return response
 
 
