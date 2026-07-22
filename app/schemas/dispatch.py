@@ -1,13 +1,22 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime, date
 from uuid import UUID
 from app.models import OrderStatus, DispatchStatus, Priority
 
 
+# ── Customer Summary (for nested in order response) ──
+class CustomerSummary(BaseModel):
+    id: UUID
+    company_name: str
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
 # ── Order Location ──
 class OrderLocationCreate(BaseModel):
-    location_type: str = Field(..., pattern="^(pickup|delivery)$")
+    location_type: str = Field(..., pattern="^(pickup|delivery|extra)$")
     sequence: int = Field(1, ge=1)
     name: str
     address: str
@@ -82,6 +91,10 @@ class FreightOrderResponse(BaseModel):
     id: UUID
     order_number: str
     customer_id: UUID
+    # Nested customer with company_name so frontend can display broker name
+    customer: Optional[CustomerSummary] = None
+    # customer_name shortcut for convenience
+    customer_name: Optional[str] = None
     status: OrderStatus
     priority: Priority
     material_type: str
@@ -110,11 +123,30 @@ class FreightOrderResponse(BaseModel):
     special_instructions: Optional[str] = None
     internal_notes: Optional[str] = None
     cancellation_reason: Optional[str] = None
+    # locations mapped from order_locations relationship
     locations: List[OrderLocationResponse] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def model_validate(cls, obj: Any, **kwargs):
+        # Map order_locations -> locations if not already mapped
+        if hasattr(obj, 'order_locations') and not isinstance(obj, dict):
+            data = {}
+            for field in cls.model_fields:
+                if hasattr(obj, field):
+                    data[field] = getattr(obj, field)
+            # Override locations with order_locations
+            data['locations'] = getattr(obj, 'order_locations', [])
+            # Set customer_name from nested customer
+            cust = getattr(obj, 'customer', None)
+            if cust:
+                data['customer_name'] = getattr(cust, 'company_name', None)
+                data['customer'] = cust
+            return cls(**data)
+        return super().model_validate(obj, **kwargs)
 
 
 # ── Dispatch ──

@@ -68,8 +68,15 @@ async def list_orders(
         sort_order=sort_order,
     )
 
+    # Reload each order with relations so customer + order_locations are present
+    orders_with_relations = []
+    for item in items:
+        full = await repo.get_with_relations(item.id)
+        if full:
+            orders_with_relations.append(full)
+
     return PaginatedResponse(
-        items=[FreightOrderResponse.model_validate(i) for i in items],
+        items=[FreightOrderResponse.model_validate(i) for i in orders_with_relations],
         total=total, page=page, size=size, pages=(total + size - 1) // size,
     )
 
